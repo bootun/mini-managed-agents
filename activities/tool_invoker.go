@@ -3,7 +3,6 @@ package activities
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/bootun/mini-managed-agents/tools"
 )
