@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:13
+    container_name: mini-managed-agents-postgres
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    ports:
+      - "5432:5432"
+    volumes:
+      - temporal-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -d temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: mini-managed-agents-temporal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development.yaml
+    ports:
+      - "7233:7233"
+    volumes:
+      - ./docker/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
+    healthcheck:                                                                                                                                                           
+        test: ["CMD-SHELL", "tctl --address temporal:7233 cluster health"]                                                                                                   
+        interval: 5s                                                                                                                                                         
+        timeout: 10s                                                                                                                                                         
+        retries: 20                                                                                                                                                          
+        start_period: 15s
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    container_name: mini-managed-agents-temporal-ui
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8233:8080"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+    depends_on:
+      temporal:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  temporal-postgres-data:
